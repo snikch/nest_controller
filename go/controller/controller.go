@@ -1,6 +1,10 @@
 package controller
 
-import "github.com/kidoman/embd"
+import (
+	"strings"
+
+	"github.com/kidoman/embd"
+)
 
 // Controller represents a fan in thermostat controller for multiple zones.
 type Controller struct {
@@ -22,7 +26,7 @@ func NewController(pin uint32) *Controller {
 
 // AddZone adds a zone and starts running it.
 func (controller *Controller) AddZone(zone *Zone) {
-	controller.Zones[zone.Name] = zone
+	controller.Zones[strings.ToLower(zone.Name)] = zone
 	zone.run(controller.change)
 }
 
