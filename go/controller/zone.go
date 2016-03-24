@@ -30,8 +30,11 @@ func NewZone(name string, pin uint32) *Zone {
 	}
 }
 
-func (zone *Zone) run(change chan<- bool) {
-	zone.initPins()
+func (zone *Zone) run(change chan<- bool) error {
+	err := zone.initPins()
+	if err != nil {
+		return err
+	}
 	zone.UpdateDamperPins()
 
 	for {
@@ -74,6 +77,7 @@ func (zone *Zone) run(change chan<- bool) {
 	// if err != nil {
 	// 	panic(err)
 	// }
+	return nil
 }
 
 // UpdateDamperPins ensure the damper pins represent the current active state.
@@ -94,11 +98,11 @@ func (zone *Zone) UpdateDamperPins() {
 	}
 }
 
-func (zone *Zone) initPins() {
+func (zone *Zone) initPins() error {
 	// Get the pin for the call for heat.
 	pin, err := embd.NewDigitalPin(zone.CallForHeatPin)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	pin.SetDirection(embd.In)
 	zone.callForHeatPin = pin
@@ -107,7 +111,7 @@ func (zone *Zone) initPins() {
 	if zone.DamperOnPin != nil {
 		pin, err := embd.NewDigitalPin(zone.DamperOnPin)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		pin.SetDirection(embd.Out)
 		zone.damperOnPin = pin
@@ -117,9 +121,10 @@ func (zone *Zone) initPins() {
 	if zone.DamperOnPin != nil {
 		pin, err := embd.NewDigitalPin(zone.DamperOffPin)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		pin.SetDirection(embd.Out)
 		zone.damperOffPin = pin
 	}
+	return nil
 }
