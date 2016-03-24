@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/kidoman/embd"
-	"github.com/vend/features/log"
+	"github.com/snikch/api/log"
 )
 
 // Zone represents a single zone that can optionally be turned on or off.
