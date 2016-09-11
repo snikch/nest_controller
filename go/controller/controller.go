@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/kidoman/embd"
+	"github.com/snikch/api/log"
+	"github.com/stianeikeland/go-rpio"
 )
 
 // Controller represents a fan in thermostat controller for multiple zones.
@@ -40,28 +42,34 @@ func (controller *Controller) AddZone(zone *Zone) {
 
 // Run starts the controller running and listening for zone changes.
 func (controller *Controller) Run() error {
+	go controller.run()
 	err := controller.initPins()
 	if err != nil {
-		// return err
+		return err
 	}
 
 	// Turn all zones on.
 	for _, zone := range controller.Zones {
-		err := zone.run(controller.change)
+		log.WithField("zone", zone.Name).Info("Starting zone")
+		err := zone.initPins()
 		if err != nil {
-			// return err
+			return err
 		}
+		go zone.Run(controller.change)
+		log.WithField("zone", zone.Name).Info("Zone started")
 	}
 
 	// Mark the controller as running.
 	controller.Running = true
-	go controller.run()
 	return nil
 }
+
 func (controller *Controller) run() {
 	// Start a loop to check on the zones when a change is emitted.
 	for {
+		log.Info("Controller is waiting")
 		<-controller.change
+		log.Info("Controller received change event")
 		targetState := false
 
 		// First check for any override, and apply that over others.
@@ -114,11 +122,13 @@ func (controller *Controller) SetHeaterState() {
 
 func (controller *Controller) initPins() error {
 	// Get the pin for the call for heat.
-	pin, err := embd.NewDigitalPin(controller.Pin)
+	pin, err := embd.NewDigitalPin(int(controller.Pin))
 	if err != nil {
 		return err
 	}
 	pin.SetDirection(embd.Out)
+	rpin := rpio.Pin(int(controller.Pin))
+	rpin.PullUp()
 	controller.pin = pin
 	return nil
 }

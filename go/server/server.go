@@ -1,10 +1,12 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/snikch/api/ctx"
+	"github.com/snikch/api/fail"
 	"github.com/snikch/api/render"
 	"github.com/snikch/api/vc"
 	"github.com/snikch/nest/go/controller"
@@ -18,13 +20,16 @@ func init() {
 // NewServer returns a fully initialized http.Handler.
 func NewServer(ctrl *controller.Controller) http.Handler {
 	router := httprouter.New()
-	processor := vc.ActionProcessor{}
+	processor := vc.NewActionProcessor()
 	server := Server{ctrl}
 
-	router.GET("/status", processor.HandleActionFunc("status", server.HandleStatus))
-	router.POST("/heat/override/on", processor.HandleActionFunc("override", server.HandleOverrideOn))
-	router.GET("/heat/override/off", processor.HandleActionFunc("override", server.HandleOverrideOff))
-	router.GET("/heat/override/clear", processor.HandleActionFunc("override", server.HandleOverrideClear))
+	router.GET("/status", processor.HandleActionFunc("status", "show status", server.HandleStatus))
+	router.POST("/heat/override/on", processor.HandleActionFunc("override", "on", server.HandleOverrideOn))
+	router.POST("/heat/override/off", processor.HandleActionFunc("override", "off", server.HandleOverrideOff))
+	router.POST("/heat/override/clear", processor.HandleActionFunc("override", "clear", server.HandleOverrideClear))
+	router.POST("/zone/:zone_name/override/on", processor.HandleActionFunc("zone_override", "on", server.HandleZoneOverrideOn))
+	router.POST("/zone/:zone_name/override/off", processor.HandleActionFunc("zone_override", "off", server.HandleZoneOverrideOff))
+	router.POST("/zone/:zone_name/override/clear", processor.HandleActionFunc("zone_override", "clear", server.HandleZoneOverrideClear))
 	return router
 }
 
@@ -54,5 +59,35 @@ func (server *Server) HandleOverrideOff(context *ctx.Context) (interface{}, int,
 // HandleOverrideClear clears the controller override.
 func (server *Server) HandleOverrideClear(context *ctx.Context) (interface{}, int, error) {
 	server.Controller.ClearOverride()
+	return nil, http.StatusAccepted, nil
+}
+
+// HandleZoneOverrideOn sets the controller override to on.
+func (server *Server) HandleZoneOverrideOn(context *ctx.Context) (interface{}, int, error) {
+	zone, ok := server.Controller.Zones[vc.ContextParams(context).ByName("zone_name")]
+	if !ok {
+		return nil, 0, fail.NewValidationError(fmt.Errorf("Zone does not exist"))
+	}
+	zone.SetOverride(true)
+	return nil, http.StatusAccepted, nil
+}
+
+// HandleZoneOverrideOff sets the controller override to off.
+func (server *Server) HandleZoneOverrideOff(context *ctx.Context) (interface{}, int, error) {
+	zone, ok := server.Controller.Zones[vc.ContextParams(context).ByName("zone_name")]
+	if !ok {
+		return nil, 0, fail.NewValidationError(fmt.Errorf("Zone does not exist"))
+	}
+	zone.SetOverride(false)
+	return nil, http.StatusAccepted, nil
+}
+
+// HandleZoneOverrideClear clears the controller override.
+func (server *Server) HandleZoneOverrideClear(context *ctx.Context) (interface{}, int, error) {
+	zone, ok := server.Controller.Zones[vc.ContextParams(context).ByName("zone_name")]
+	if !ok {
+		return nil, 0, fail.NewValidationError(fmt.Errorf("Zone does not exist"))
+	}
+	zone.ClearOverride()
 	return nil, http.StatusAccepted, nil
 }
