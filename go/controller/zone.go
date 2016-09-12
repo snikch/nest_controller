@@ -27,6 +27,7 @@ type Zone struct {
 	stopCh          chan bool
 	currentChangeCh chan<- bool
 	running         bool
+	events          chan<- Event
 }
 
 // NewZone returns an initialized zone.
@@ -60,8 +61,9 @@ func (zone *Zone) Stop() {
 }
 
 // Run is a blocking function that starts processing pin readings for a zone.
-func (zone *Zone) Run(ch chan<- bool) error {
+func (zone *Zone) Run(ch chan<- bool, events chan<- Event) error {
 	zone.currentChangeCh = ch
+	zone.events = events
 RUNLOOP:
 	for {
 		select {
@@ -126,6 +128,12 @@ func (zone *Zone) processReading(target bool) {
 	// Update the pins if required.
 	if didChange {
 		zone.UpdateDamperPins()
+		go func() {
+			zone.events <- Event{
+				Entity: fmt.Sprintf("zone/%s", zone.Name),
+				Value:  fmt.Sprintf("%t", zone.Active),
+			}
+		}()
 		zone.currentChangeCh <- true
 	}
 	zone.Reading = target

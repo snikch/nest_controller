@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/kidoman/embd"
@@ -10,10 +11,12 @@ import (
 
 // Controller represents a fan in thermostat controller for multiple zones.
 type Controller struct {
-	Running bool `json:"running"`
-	Heat    `json:"heat"`
-	Zones   map[string]*Zone `json:"zones"`
-	change  chan bool
+	Running       bool `json:"running"`
+	Heat          `json:"heat"`
+	Zones         map[string]*Zone `json:"zones"`
+	change        chan bool
+	Events        chan Event     `json:"-"`
+	EventHandlers []EventHandler `json:"-"`
 }
 
 // Heat represents the current heat state.
@@ -26,13 +29,37 @@ type Heat struct {
 
 // NewController returns an initialized controller on the supplied pin.
 func NewController(pin uint32) *Controller {
-	return &Controller{
-		Zones: map[string]*Zone{},
+	controller := &Controller{
+		Events: make(chan Event),
+		Zones:  map[string]*Zone{},
 		Heat: Heat{
 			Pin: pin,
 		},
-		change: make(chan bool),
+		EventHandlers: []EventHandler{},
+		change:        make(chan bool),
 	}
+	go controller.HandleEvents()
+	return controller
+}
+
+// HandleEvents is a blocking function that pulls events off the event handler
+// channel and pushes them to the various event handlers.
+func (controller *Controller) HandleEvents() {
+	for {
+		event := <-controller.Events
+		log.WithField("event", event).Info("Received event")
+		for _, handler := range controller.EventHandlers {
+			err := handler.Push(event)
+			if err != nil {
+				log.WithError(err).WithField("handler", handler.Name).Error("Failed to push event")
+			}
+		}
+	}
+}
+
+// AddEventHandler adds an event handler to the controllers list.
+func (controller *Controller) AddEventHandler(handler EventHandler) {
+	controller.EventHandlers = append(controller.EventHandlers, handler)
 }
 
 // AddZone adds a zone and starts running it.
@@ -55,7 +82,7 @@ func (controller *Controller) Run() error {
 		if err != nil {
 			return err
 		}
-		go zone.Run(controller.change)
+		go zone.Run(controller.change, controller.Events)
 		log.WithField("zone", zone.Name).Info("Zone started")
 	}
 
@@ -85,12 +112,25 @@ func (controller *Controller) run() {
 			}
 		}
 
+		didChange := false
 		if targetState && !controller.Heat.Active {
 			controller.Heat.Active = true
 			controller.SetHeaterState()
+			didChange = true
 		} else if !targetState && controller.Heat.Active {
 			controller.Heat.Active = false
 			controller.SetHeaterState()
+			didChange = true
+		}
+
+		// Submit a heat change event.
+		if didChange {
+			go func() {
+				controller.Events <- Event{
+					Entity: "heat",
+					Value:  fmt.Sprintf("%t", controller.Heat.Active),
+				}
+			}()
 		}
 	}
 }

@@ -3,9 +3,12 @@ package main
 import (
 	"net/http"
 	"os"
+	"time"
 
+	"github.com/eclipse/paho.mqtt.golang"
 	"github.com/kidoman/embd"
 	_ "github.com/kidoman/embd/host/rpi"
+	"github.com/snikch/api/config"
 	"github.com/snikch/api/lifecycle"
 	"github.com/snikch/api/log"
 	"github.com/snikch/nest/go/controller"
@@ -54,22 +57,35 @@ func main() {
 	log.Info("Adding Lounge zone")
 	ctrl.AddZone(controller.NewZone("Lounge", 18))
 
+	// Now we generate an mqtt event handler
+	broker := config.String("MQTT_BROKER", "tcp://192.168.0.119:1883")
+	opts := mqtt.NewClientOptions().AddBroker(broker).SetClientID("fireplace")
+	opts.SetKeepAlive(2 * time.Second)
+	// opts.SetDefaultPublishHandler(f)
+	opts.SetPingTimeout(1 * time.Second)
+
+	c := mqtt.NewClient(opts)
+	if token := c.Connect(); token.Wait() && token.Error() != nil {
+		log.WithError(err).WithField("address", broker).Fatal("Could not connect to mqtt broker")
+	}
+	lifecycle.RegisterShutdownCallback("mqtt disconnect", func() error {
+		c.Disconnect(250)
+		return nil
+	})
+	ctrl.AddEventHandler(controller.NewMQTTEventHandler("fireplace", c))
+
 	// Run the controller
 	go func() {
 		log.Info("Starting controller")
 		err = ctrl.Run()
 		if err != nil {
-			log.WithError(err).Error("Cannot start controller. Is this running on embedded hardware?")
-			os.Exit(1)
+			log.WithError(err).Fatal("Cannot start controller. Is this running on embedded hardware?")
 		}
 	}()
 
 	// Create a new server for controlling the controller.
 	srvr := server.NewServer(ctrl)
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	port := config.String("PORT", "8080")
 	go func() {
 		log.WithField("port", port).Info("Starting Server")
 		log.Fatal(http.ListenAndServe(":"+port, srvr))
