@@ -60,7 +60,7 @@ func main() {
 	// Now we generate an mqtt event handler
 	broker := config.String("MQTT_BROKER", "tcp://192.168.0.119:1883")
 	opts := mqtt.NewClientOptions().AddBroker(broker).SetClientID("fireplace")
-	opts.SetKeepAlive(2 * time.Second)
+	opts.SetKeepAlive(20 * time.Second)
 	// opts.SetDefaultPublishHandler(f)
 	opts.SetPingTimeout(1 * time.Second)
 
